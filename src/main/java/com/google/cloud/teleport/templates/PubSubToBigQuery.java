@@ -40,6 +40,7 @@ import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.CreateDisposition;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.WriteDisposition;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryInsertError;
 import org.apache.beam.sdk.io.gcp.bigquery.InsertRetryPolicy;
+import org.apache.beam.sdk.io.gcp.bigquery.TableDestination;
 import org.apache.beam.sdk.io.gcp.bigquery.WriteResult;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubMessage;
@@ -59,6 +60,7 @@ import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionList;
 import org.apache.beam.sdk.values.PCollectionTuple;
 import org.apache.beam.sdk.values.TupleTag;
+import org.apache.beam.sdk.values.ValueInSingleWindow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -174,20 +176,45 @@ public class PubSubToBigQuery {
         "The Cloud Pub/Sub subscription to consume from. "
             + "The name should be in the format of "
             + "projects/<project-id>/subscriptions/<subscription-name>.")
-    ValueProvider<String> getInputSubscription();
+    ValueProvider<String> getInputSubscriptionId();
 
-    void setInputSubscription(ValueProvider<String> value);
+    void setInputSubscriptionId(ValueProvider<String> inputSubscriptionId);
 
     @Description(
         "This determines whether the template reads from " + "a pub/sub subscription or a topic")
-    @Default.Boolean(false)
+    @Default.Boolean(true)
     Boolean getUseSubscription();
 
     void setUseSubscription(Boolean value);
 
     @Description(
+        "If multiplex mode on, PubSub message attribute field used to group messages"
+    )
+    @Default.String("group")
+    ValueProvider<String> getGroupIdField();
+
+    void setGroupIdField(ValueProvider<String> groupIdField);
+
+    @Description(
+        "If multiplex mode on, BigQuery table prefix to use for destination table name"
+    )
+    @Default.String("")
+    ValueProvider<String> getTablePrefix();
+
+    void setTablePrefix(ValueProvider<String> tablePrefix);
+
+    @Description(
+        "Turn on multiplex mode"
+    )
+    @Default.Boolean(true)
+    Boolean getIsMultiplexOn();
+
+    void setIsMultiplexOn(Boolean isMultiplexOn);
+
+    @Description(
         "The dead-letter table to output to within BigQuery in <project-id>:<dataset>.<table> "
-            + "format. If it doesn't exist, it will be created during pipeline execution.")
+            + "format. If it doesn't exist, it will be created during pipeline execution."
+            + "Should always be set when multiplex mode is on")
     ValueProvider<String> getOutputDeadletterTable();
 
     void setOutputDeadletterTable(ValueProvider<String> value);
@@ -244,7 +271,7 @@ public class PubSubToBigQuery {
           pipeline.apply(
               "ReadPubSubSubscription",
               PubsubIO.readMessagesWithAttributes()
-                  .fromSubscription(options.getInputSubscription()));
+                  .fromSubscription(options.getInputSubscriptionId()));
     } else {
       messages =
           pipeline.apply(
@@ -262,19 +289,45 @@ public class PubSubToBigQuery {
     /*
      * Step #3: Write the successful records out to BigQuery
      */
-    WriteResult writeResult =
-        convertedTableRows
-            .get(TRANSFORM_OUT)
-            .apply(
-                "WriteSuccessfulRecords",
-                BigQueryIO.writeTableRows()
-                    .withoutValidation()
-                    .withCreateDisposition(CreateDisposition.CREATE_NEVER)
-                    .withWriteDisposition(WriteDisposition.WRITE_APPEND)
-                    .withExtendedErrorInfo()
-                    .withMethod(BigQueryIO.Write.Method.STREAMING_INSERTS)
-                    .withFailedInsertRetryPolicy(InsertRetryPolicy.retryTransientErrors())
-                    .to(options.getOutputTableSpec()));
+    WriteResult writeResult = null;
+    if(options.getIsMultiplexOn()) {
+      final ValueProvider<String> groupIdFieldProvider = options.getGroupIdField();
+      final ValueProvider<String> tablePrefixProvider = options.getTablePrefix();
+      writeResult =
+          convertedTableRows
+              .get(TRANSFORM_OUT)
+              .apply(
+                  "WriteSuccessfulRecordsMultiplex",
+                  BigQueryIO.writeTableRows()
+                      .withoutValidation()
+                      .withCreateDisposition(CreateDisposition.CREATE_NEVER)
+                      .withWriteDisposition(WriteDisposition.WRITE_APPEND)
+                      .withExtendedErrorInfo()
+                      .withMethod(BigQueryIO.Write.Method.STREAMING_INSERTS)
+                      .withFailedInsertRetryPolicy(InsertRetryPolicy.retryTransientErrors())
+                      .to((ValueInSingleWindow<TableRow> row) -> {
+                        String group = (String) row.getValue().getOrDefault(groupIdFieldProvider.get(), "");
+                        LOG.info(String.format("Writing to %s", tablePrefixProvider.get() + group));
+                        return new TableDestination(
+                            tablePrefixProvider.get() + group,
+                            "Multiplex table " + group
+                        );
+                      }));
+    } else {
+      writeResult =
+          convertedTableRows
+              .get(TRANSFORM_OUT)
+              .apply(
+                  "WriteSuccessfulRecords",
+                  BigQueryIO.writeTableRows()
+                      .withoutValidation()
+                      .withCreateDisposition(CreateDisposition.CREATE_NEVER)
+                      .withWriteDisposition(WriteDisposition.WRITE_APPEND)
+                      .withExtendedErrorInfo()
+                      .withMethod(BigQueryIO.Write.Method.STREAMING_INSERTS)
+                      .withFailedInsertRetryPolicy(InsertRetryPolicy.retryTransientErrors())
+                      .to(options.getOutputTableSpec()));
+    }
 
     /*
      * Step 3 Contd.
