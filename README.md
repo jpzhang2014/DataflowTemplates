@@ -83,6 +83,16 @@ mvn compile exec:java \
 --runner=DataflowRunner"
 ```
 
+For  example:
+```sh
+mvn compile exec:java -Dexec.mainClass=com.google.cloud.teleport.templates.PubSubToBigQuery -Dexec.cleanupDaemonThreads=false -Dexec.args=" \
+--project=dataflow-test-270701 \
+--stagingLocation=gs://dataflow-files-jza/staging \
+--tempLocation=gs://dataflow-files-jza/temp \
+--templateLocation=gs://dataflow-files-jza/templates/PubSubSubscriptionToBigQueryMultiplex \
+--runner=DataflowRunner"
+```
+
 
 ### Executing a Template File
 

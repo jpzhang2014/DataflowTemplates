@@ -307,6 +307,7 @@ public class PubSubToBigQuery {
                       .withFailedInsertRetryPolicy(InsertRetryPolicy.retryTransientErrors())
                       .to((ValueInSingleWindow<TableRow> row) -> {
                         String group = (String) row.getValue().getOrDefault(groupIdFieldProvider.get(), "");
+                        group = group.replaceAll("\\.", "_");
                         LOG.info(String.format("Writing to %s", tablePrefixProvider.get() + group));
                         return new TableDestination(
                             tablePrefixProvider.get() + group,
