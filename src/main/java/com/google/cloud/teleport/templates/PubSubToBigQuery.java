@@ -30,7 +30,10 @@ import com.google.cloud.teleport.util.ResourceUtils;
 import com.google.cloud.teleport.util.ValueProviderUtils;
 import com.google.cloud.teleport.values.FailsafeElement;
 import com.google.common.collect.ImmutableList;
+import com.google.gson.Gson;
+import com.google.gson.internal.LinkedHashTreeMap;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.coders.CoderRegistry;
@@ -157,6 +160,10 @@ public class PubSubToBigQuery {
   public static final FailsafeElementCoder<String, String> FAILSAFE_ELEMENT_CODER =
       FailsafeElementCoder.of(StringUtf8Coder.of(), StringUtf8Coder.of());
 
+  private static final Gson GSON = new Gson();
+
+  private static final String INBOUND_TIMESTAMP = "_inboundTimestamp";
+
   /**
    * The {@link Options} class provides the custom execution options passed by the executor at the
    * command-line.
@@ -279,8 +286,10 @@ public class PubSubToBigQuery {
               PubsubIO.readMessagesWithAttributes().fromTopic(options.getInputTopic()));
     }
 
+    PCollection<PubsubMessage> messagesTs = messages.apply(ParDo.of(new AddTimestampFn()));
+
     PCollectionTuple convertedTableRows =
-        messages
+        messagesTs
             /*
              * Step #2: Transform the PubsubMessages into TableRows
              */
@@ -308,7 +317,7 @@ public class PubSubToBigQuery {
                       .to((ValueInSingleWindow<TableRow> row) -> {
                         String group = (String) row.getValue().getOrDefault(groupIdFieldProvider.get(), "");
                         group = group.replaceAll("\\.", "_");
-                        LOG.info(String.format("Writing to %s", tablePrefixProvider.get() + group));
+                        LOG.debug(String.format("Writing to %s", tablePrefixProvider.get() + group));
                         return new TableDestination(
                             tablePrefixProvider.get() + group,
                             "Multiplex table " + group
@@ -348,9 +357,9 @@ public class PubSubToBigQuery {
      * or conversion out to BigQuery deadletter table.
      */
     PCollectionList.of(
-            ImmutableList.of(
-                convertedTableRows.get(UDF_DEADLETTER_OUT),
-                convertedTableRows.get(TRANSFORM_DEADLETTER_OUT)))
+        ImmutableList.of(
+            convertedTableRows.get(UDF_DEADLETTER_OUT),
+            convertedTableRows.get(TRANSFORM_DEADLETTER_OUT)))
         .apply("Flatten", Flatten.pCollections())
         .apply(
             "WriteFailedRecords",
@@ -376,6 +385,16 @@ public class PubSubToBigQuery {
             .build());
 
     return pipeline.run();
+  }
+
+  static class AddTimestampFn extends DoFn<PubsubMessage, PubsubMessage> {
+    @ProcessElement
+    public void processElement(@Element PubsubMessage msg, OutputReceiver<PubsubMessage> out) {
+      LinkedHashTreeMap json = GSON.fromJson(new String(msg.getPayload()), LinkedHashTreeMap.class);
+      json.put(INBOUND_TIMESTAMP, Instant.now().toString());
+      final String jsonTimestamped = GSON.toJson(json);
+      out.output(new PubsubMessage(jsonTimestamped.getBytes(), msg.getAttributeMap(), msg.getMessageId()));
+    }
   }
 
   /**
