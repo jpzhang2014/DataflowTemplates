@@ -2,8 +2,8 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="b7aa08bd-1dc6-4644-a215-42a235737f94" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/google/cloud/teleport/bigtable/BeamRowToBigtableFn.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/google/cloud/teleport/bigtable/BeamRowToBigtableFn.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/google/cloud/teleport/templates/PubSubToBigQuery.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/google/cloud/teleport/templates/PubSubToBigQuery.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -100,7 +100,7 @@
       <workItem from="1583799075244" duration="452000" />
       <workItem from="1583800109512" duration="47818000" />
       <workItem from="1585571124247" duration="494000" />
-      <workItem from="1585571654130" duration="2500000" />
+      <workItem from="1585571654130" duration="4883000" />
     </task>
     <servers />
   </component>

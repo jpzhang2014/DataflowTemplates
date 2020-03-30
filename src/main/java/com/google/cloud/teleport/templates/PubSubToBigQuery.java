@@ -18,6 +18,7 @@ package com.google.cloud.teleport.templates;
 
 import static com.google.cloud.teleport.templates.TextToBigQueryStreaming.wrapBigQueryInsertError;
 
+import com.google.api.services.bigquery.model.ErrorProto;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.cloud.teleport.coders.FailsafeElementCoder;
 import com.google.cloud.teleport.templates.common.BigQueryConverters.FailsafeJsonToTableRow;
@@ -34,6 +35,7 @@ import com.google.gson.Gson;
 import com.google.gson.internal.LinkedHashTreeMap;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Set;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.coders.CoderRegistry;
@@ -64,6 +66,7 @@ import org.apache.beam.sdk.values.PCollectionList;
 import org.apache.beam.sdk.values.PCollectionTuple;
 import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.sdk.values.ValueInSingleWindow;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -163,6 +166,9 @@ public class PubSubToBigQuery {
   private static final Gson GSON = new Gson();
 
   private static final String INBOUND_TIMESTAMP = "_inboundTimestamp";
+
+  private static final Set<String> PERSISTENT_ERRORS =
+      ImmutableSet.of("invalid", "invalidQuery", "notImplemented", "notFound");
 
   /**
    * The {@link Options} class provides the custom execution options passed by the executor at the
@@ -313,7 +319,7 @@ public class PubSubToBigQuery {
                       .withWriteDisposition(WriteDisposition.WRITE_APPEND)
                       .withExtendedErrorInfo()
                       .withMethod(BigQueryIO.Write.Method.STREAMING_INSERTS)
-                      .withFailedInsertRetryPolicy(InsertRetryPolicy.retryTransientErrors())
+                      .withFailedInsertRetryPolicy(InsertRetryPolicy.neverRetry())
                       .to((ValueInSingleWindow<TableRow> row) -> {
                         String group = (String) row.getValue().getOrDefault(groupIdFieldProvider.get(), "");
                         group = group.replaceAll("\\.", "_");
