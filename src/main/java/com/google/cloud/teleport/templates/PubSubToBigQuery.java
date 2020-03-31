@@ -18,7 +18,6 @@ package com.google.cloud.teleport.templates;
 
 import static com.google.cloud.teleport.templates.TextToBigQueryStreaming.wrapBigQueryInsertError;
 
-import com.google.api.services.bigquery.model.ErrorProto;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.cloud.teleport.coders.FailsafeElementCoder;
 import com.google.cloud.teleport.templates.common.BigQueryConverters.FailsafeJsonToTableRow;
@@ -35,7 +34,6 @@ import com.google.gson.Gson;
 import com.google.gson.internal.LinkedHashTreeMap;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Set;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.coders.CoderRegistry;
@@ -44,6 +42,7 @@ import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.CreateDisposition;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.WriteDisposition;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryInsertError;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryServices;
 import org.apache.beam.sdk.io.gcp.bigquery.InsertRetryPolicy;
 import org.apache.beam.sdk.io.gcp.bigquery.TableDestination;
 import org.apache.beam.sdk.io.gcp.bigquery.WriteResult;
@@ -66,7 +65,6 @@ import org.apache.beam.sdk.values.PCollectionList;
 import org.apache.beam.sdk.values.PCollectionTuple;
 import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.sdk.values.ValueInSingleWindow;
-import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -167,9 +165,6 @@ public class PubSubToBigQuery {
 
   private static final String INBOUND_TIMESTAMP = "_inboundTimestamp";
 
-  private static final Set<String> PERSISTENT_ERRORS =
-      ImmutableSet.of("invalid", "invalidQuery", "notImplemented", "notFound");
-
   /**
    * The {@link Options} class provides the custom execution options passed by the executor at the
    * command-line.
@@ -263,6 +258,7 @@ public class PubSubToBigQuery {
     CoderRegistry coderRegistry = pipeline.getCoderRegistry();
     coderRegistry.registerCoderForType(CODER.getEncodedTypeDescriptor(), CODER);
 
+    final  BigQueryServices bigqueryServices = new RdagBigQueryServicesImpl();
     /*
      * Steps:
      *  1) Read messages in from Pub/Sub
@@ -312,14 +308,17 @@ public class PubSubToBigQuery {
           convertedTableRows
               .get(TRANSFORM_OUT)
               .apply(
-                  "WriteSuccessfulRecordsMultiplex",
+                  "WriteSuccessfulRecords",
                   BigQueryIO.writeTableRows()
+                      .withTestServices(bigqueryServices)
                       .withoutValidation()
                       .withCreateDisposition(CreateDisposition.CREATE_NEVER)
                       .withWriteDisposition(WriteDisposition.WRITE_APPEND)
                       .withExtendedErrorInfo()
                       .withMethod(BigQueryIO.Write.Method.STREAMING_INSERTS)
                       .withFailedInsertRetryPolicy(InsertRetryPolicy.neverRetry())
+                      .skipInvalidRows()
+                      .optimizedWrites()
                       .to((ValueInSingleWindow<TableRow> row) -> {
                         String group = (String) row.getValue().getOrDefault(groupIdFieldProvider.get(), "");
                         group = group.replaceAll("\\.", "_");
