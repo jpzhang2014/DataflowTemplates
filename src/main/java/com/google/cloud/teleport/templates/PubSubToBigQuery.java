@@ -316,7 +316,7 @@ public class PubSubToBigQuery {
                       .withWriteDisposition(WriteDisposition.WRITE_APPEND)
                       .withExtendedErrorInfo()
                       .withMethod(BigQueryIO.Write.Method.STREAMING_INSERTS)
-                      .withFailedInsertRetryPolicy(InsertRetryPolicy.neverRetry())
+                      .withFailedInsertRetryPolicy(InsertRetryPolicy.retryTransientErrors())
                       .skipInvalidRows()
                       .optimizedWrites()
                       .to((ValueInSingleWindow<TableRow> row) -> {
