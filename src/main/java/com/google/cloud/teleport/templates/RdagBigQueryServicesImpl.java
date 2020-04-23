@@ -46,7 +46,6 @@ import com.google.api.services.bigquery.model.JobStatus;
 import com.google.api.services.bigquery.model.Table;
 import com.google.api.services.bigquery.model.TableDataInsertAllRequest;
 import com.google.api.services.bigquery.model.TableDataInsertAllResponse;
-import com.google.api.services.bigquery.model.TableDataInsertAllResponse.InsertErrors;
 import com.google.api.services.bigquery.model.TableDataList;
 import com.google.api.services.bigquery.model.TableReference;
 import com.google.api.services.bigquery.model.TableRow;
@@ -88,7 +87,6 @@ import org.apache.beam.sdk.io.gcp.bigquery.BigQueryOptions;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryServices;
 import org.apache.beam.sdk.io.gcp.bigquery.ErrorContainer;
 import org.apache.beam.sdk.io.gcp.bigquery.InsertRetryPolicy;
-import org.apache.beam.sdk.io.gcp.bigquery.TableRowJsonCoder;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.transforms.SerializableFunction;
 import org.apache.beam.sdk.util.FluentBackoff;
@@ -103,8 +101,7 @@ import org.slf4j.LoggerFactory;
 
 public class RdagBigQueryServicesImpl implements BigQueryServices {
 
-  private static final Logger LOG = LoggerFactory
-      .getLogger(RdagBigQueryServicesImpl.class);
+  private static final Logger LOG = LoggerFactory.getLogger(RdagBigQueryServicesImpl.class);
 
   // How frequently to log while polling.
   private static final Duration POLLING_LOG_GAP = Duration.standardMinutes(10);
@@ -144,7 +141,6 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
 
   @VisibleForTesting
   static class JobServiceImpl implements BigQueryServices.JobService {
-
     private final ApiErrorExtractor errorExtractor;
     private final Bigquery client;
 
@@ -388,7 +384,6 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
 
   @VisibleForTesting
   static class DatasetServiceImpl implements DatasetService {
-
     private static final FluentBackoff INSERT_BACKOFF_FACTORY =
         FluentBackoff.DEFAULT.withInitialBackoff(Duration.millis(200)).withMaxRetries(5);
 
@@ -722,8 +717,7 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
         List<ValueInSingleWindow<T>> failedInserts,
         ErrorContainer<T> errorContainer,
         boolean skipInvalidRows,
-        boolean ignoreUnkownValues,
-        boolean ignoreInsertIds)
+        boolean ignoreUnkownValues)
         throws IOException, InterruptedException {
       checkNotNull(ref, "ref");
       if (executor == null) {
@@ -743,10 +737,7 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
       // These lists contain the rows to publish. Initially the contain the entire list.
       // If there are failures, they will contain only the failed rows to be retried.
       List<ValueInSingleWindow<TableRow>> rowsToPublish = rowList;
-      List<String> idsToPublish = null;
-      if (!ignoreInsertIds) {
-        idsToPublish = insertIdList;
-      }
+      List<String> idsToPublish = insertIdList;
       while (true) {
         List<ValueInSingleWindow<TableRow>> retryRows = new ArrayList<>();
         List<String> retryIds = (idsToPublish != null) ? new ArrayList<>() : null;
@@ -754,9 +745,9 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
         int strideIndex = 0;
         // Upload in batches.
         List<TableDataInsertAllRequest.Rows> rows = new ArrayList<>();
-        long dataSize = 0L;
+        int dataSize = 0;
 
-        List<Future<List<InsertErrors>>> futures = new ArrayList<>();
+        List<Future<List<TableDataInsertAllResponse.InsertErrors>>> futures = new ArrayList<>();
         List<Integer> strideIndices = new ArrayList<>();
 
         for (int i = 0; i < rowsToPublish.size(); ++i) {
@@ -768,12 +759,7 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
           out.setJson(row.getUnknownKeys());
           rows.add(out);
 
-          try {
-            dataSize += TableRowJsonCoder.of().getEncodedElementByteSize(row);
-          } catch (Exception ex) {
-            throw new RuntimeException("Failed to convert the row to JSON", ex);
-          }
-
+          dataSize += row.toString().length();
           if (dataSize >= maxRowBatchSize
               || rows.size() >= maxRowsPerBatch
               || i == rowsToPublish.size() - 1) {
@@ -826,7 +812,7 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
 
             retTotalDataSize += dataSize;
 
-            dataSize = 0L;
+            dataSize = 0;
             strideIndex = i + 1;
             rows = new ArrayList<>();
           }
@@ -834,8 +820,7 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
 
         try {
           for (int i = 0; i < futures.size(); i++) {
-            List<TableDataInsertAllResponse.InsertErrors> errors = futures.get(i)
-                .get(10, TimeUnit.SECONDS);
+            List<TableDataInsertAllResponse.InsertErrors> errors = futures.get(i).get();
             if (errors == null) {
               continue;
             }
@@ -861,8 +846,6 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
           throw new IOException("Interrupted while inserting " + rowsToPublish);
         } catch (ExecutionException e) {
           throw new RuntimeException(e.getCause());
-        } catch (TimeoutException e) {
-          throw new RuntimeException(e);
         }
 
         if (allErrors.isEmpty()) {
@@ -899,8 +882,7 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
         List<ValueInSingleWindow<T>> failedInserts,
         ErrorContainer<T> errorContainer,
         boolean skipInvalidRows,
-        boolean ignoreUnknownValues,
-        boolean ignoreInsertIds)
+        boolean ignoreUnknownValues)
         throws IOException, InterruptedException {
       return insertAll(
           ref,
@@ -912,8 +894,7 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
           failedInserts,
           errorContainer,
           skipInvalidRows,
-          ignoreUnknownValues,
-          ignoreInsertIds);
+          ignoreUnknownValues);
     }
 
     @Override
@@ -971,9 +952,7 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
     throw new IOException(errorMessage, lastException);
   }
 
-  /**
-   * Identical to {@link BackOffUtils#next} but without checked IOException.
-   */
+  /** Identical to {@link BackOffUtils#next} but without checked IOException. */
   private static boolean nextBackOff(Sleeper sleeper, BackOff backoff) throws InterruptedException {
     try {
       return BackOffUtils.next(sleeper, backoff);
@@ -982,9 +961,7 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
     }
   }
 
-  /**
-   * Returns a BigQuery client builder using the specified {@link BigQueryOptions}.
-   */
+  /** Returns a BigQuery client builder using the specified {@link BigQueryOptions}. */
   private static Bigquery.Builder newBigQueryClient(BigQueryOptions options) {
     RetryHttpRequestInitializer httpRequestInitializer =
         new RetryHttpRequestInitializer(ImmutableList.of(404));
@@ -1074,8 +1051,7 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
 
     @Override
     public BigQueryServerStream<ReadRowsResponse> readRows(ReadRowsRequest request) {
-      return new RdagBigQueryServicesImpl.BigQueryServerStreamImpl(
-          client.readRowsCallable().call(request));
+      return new RdagBigQueryServicesImpl.BigQueryServerStreamImpl(client.readRowsCallable().call(request));
     }
 
     @Override
@@ -1090,7 +1066,6 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
   }
 
   private static class BoundedExecutorService implements ExecutorService {
-
     private final ExecutorService executor;
     private final Semaphore semaphore;
     private final int parallelism;
@@ -1135,33 +1110,24 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
 
     @Override
     public <T> Future<T> submit(Callable<T> callable) {
-      return executor.submit(
-          new RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreCallable<>(
-              callable));
+      return executor.submit(new RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreCallable<>(callable));
     }
 
     @Override
     public <T> Future<T> submit(Runnable runnable, T t) {
-      return executor.submit(
-          new RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreRunnable(
-              runnable), t);
+      return executor.submit(new RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreRunnable(runnable), t);
     }
 
     @Override
     public Future<?> submit(Runnable runnable) {
-      return executor.submit(
-          new RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreRunnable(
-              runnable));
+      return executor.submit(new RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreRunnable(runnable));
     }
 
     @Override
     public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> collection)
         throws InterruptedException {
       return executor.invokeAll(
-          collection.stream().map(
-              RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreCallable::new)
-              .collect(
-                  Collectors.toList()));
+          collection.stream().map(RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreCallable::new).collect(Collectors.toList()));
     }
 
     @Override
@@ -1169,9 +1135,7 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
         Collection<? extends Callable<T>> collection, long l, TimeUnit timeUnit)
         throws InterruptedException {
       return executor.invokeAll(
-          collection.stream().map(
-              RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreCallable::new)
-              .collect(Collectors.toList()),
+          collection.stream().map(RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreCallable::new).collect(Collectors.toList()),
           l,
           timeUnit);
     }
@@ -1180,31 +1144,24 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
     public <T> T invokeAny(Collection<? extends Callable<T>> collection)
         throws InterruptedException, ExecutionException {
       return executor.invokeAny(
-          collection.stream().map(
-              RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreCallable::new)
-              .collect(Collectors.toList()));
+          collection.stream().map(RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreCallable::new).collect(Collectors.toList()));
     }
 
     @Override
     public <T> T invokeAny(Collection<? extends Callable<T>> collection, long l, TimeUnit timeUnit)
         throws InterruptedException, ExecutionException, TimeoutException {
       return executor.invokeAny(
-          collection.stream().map(
-              RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreCallable::new)
-              .collect(Collectors.toList()),
+          collection.stream().map(RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreCallable::new).collect(Collectors.toList()),
           l,
           timeUnit);
     }
 
     @Override
     public void execute(Runnable runnable) {
-      executor.execute(
-          new RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreRunnable(
-              runnable));
+      executor.execute(new RdagBigQueryServicesImpl.BoundedExecutorService.SemaphoreRunnable(runnable));
     }
 
     private class SemaphoreRunnable implements Runnable {
-
       private final Runnable runnable;
 
       SemaphoreRunnable(Runnable runnable) {
@@ -1227,7 +1184,6 @@ public class RdagBigQueryServicesImpl implements BigQueryServices {
     }
 
     private class SemaphoreCallable<V> implements Callable<V> {
-
       private final Callable<V> callable;
 
       SemaphoreCallable(Callable<V> callable) {
