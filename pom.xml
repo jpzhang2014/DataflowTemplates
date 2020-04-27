@@ -119,11 +119,6 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>org.threeten</groupId>
-      <artifactId>threetenbp</artifactId>
-      <version>${threetenbp.version}</version>
-    </dependency>
-    <dependency>
       <groupId>org.apache.beam</groupId>
       <artifactId>beam-sdks-java-extensions-google-cloud-platform-core</artifactId>
       <version>${beam.version}</version>
@@ -155,46 +150,6 @@
       <version>${beam-vendor-guava.version}</version>
     </dependency>
 
-    <!-- Dependencies needed for the Cassandra to CBT pipeline -->
-    <dependency>
-      <groupId>org.apache.beam</groupId>
-      <artifactId>beam-sdks-java-io-cassandra</artifactId>
-      <version>${beam.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>com.github.jnr</groupId>
-          <artifactId>jffi</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-
-    <dependency>
-      <groupId>com.datastax.cassandra</groupId>
-      <artifactId>cassandra-driver-core</artifactId>
-      <version>${cassandra.driver.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>com.github.jnr</groupId>
-          <artifactId>jffi</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-core</artifactId>
-      <version>${hadoop.version}</version>
-      <exclusions>
-        <exclusion><groupId>org.codehaus.jackson</groupId><artifactId>*</artifactId></exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common</artifactId>
-      <version>${hadoop.version}</version>
-      <exclusions>
-      <exclusion><groupId>org.codehaus.jackson</groupId><artifactId>*</artifactId></exclusion>
-    </exclusions>
-    </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-common</artifactId>
@@ -344,11 +299,6 @@
       <version>${spanner.version}</version>
     </dependency>
     <dependency>
-      <groupId>com.google.api.grpc</groupId>
-      <artifactId>proto-google-cloud-spanner-admin-database-v1</artifactId>
-      <version>${generated-grpc-beta.version}</version>
-    </dependency>
-    <dependency>
       <groupId>com.google.cloud.bigtable</groupId>
       <artifactId>bigtable-beam-import</artifactId>
       <version>${bigtable-beam-import.version}</version>
@@ -368,11 +318,6 @@
           <artifactId>slf4j-log4j12</artifactId>
         </exclusion>
       </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>com.google.api.grpc</groupId>
-      <artifactId>proto-google-cloud-bigtable-v2</artifactId>
-      <version>${generated-grpc-beta.version}</version>
     </dependency>
     <dependency>
       <groupId>com.google.cloud.bigtable</groupId>
@@ -499,16 +444,6 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>org.apache.kafka</groupId>
-      <artifactId>kafka-clients</artifactId>
-      <version>${kafka.clients.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.springframework</groupId>
-      <artifactId>spring-expression</artifactId>
-      <version>${spring.version}</version>
-    </dependency>
-    <dependency>
       <groupId>com.google.api</groupId>
       <artifactId>gax</artifactId>
       <version>${gax.version}</version>
@@ -521,17 +456,6 @@
     </dependency>
     <dependency>
       <groupId>com.google.cloud</groupId>
-      <artifactId>google-cloud-dlp</artifactId>
-      <version>${dlp.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>io.grpc</groupId>
-          <artifactId>grpc-core</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>com.google.cloud</groupId>
       <artifactId>google-cloud-kms</artifactId>
       <version>${kms.version}</version>
     </dependency>
@@ -539,11 +463,6 @@
       <groupId>com.google.api.grpc</groupId>
       <artifactId>proto-google-cloud-kms-v1</artifactId>
       <version>${proto-kms.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.tensorflow</groupId>
-      <artifactId>proto</artifactId>
-      <version>${tensorflow.version}</version>
     </dependency>
   </dependencies>
 
@@ -716,42 +635,6 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <version>${maven-shade-plugin.version}</version>
-      </plugin>
-
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>${maven-checkstyle-plugin.version}</version>
-        <dependencies>
-          <dependency>
-            <groupId>com.puppycrawl.tools</groupId>
-            <artifactId>checkstyle</artifactId>
-            <version>${checkstyle.version}</version>
-          </dependency>
-        </dependencies>
-        <configuration>
-          <configLocation>${project.basedir}/src/main/resources/checkstyle/checkstyle.xml</configLocation>
-          <suppressionsLocation>${project.basedir}/src/main/resources/checkstyle/suppressions.xml</suppressionsLocation>
-          <consoleOutput>true</consoleOutput>
-          <failOnViolation>true</failOnViolation>
-          <includeResources>false</includeResources>
-          <includeTestSourceDirectory>true</includeTestSourceDirectory>
-        </configuration>
-        <executions>
-          <!--
-            Execute checkstyle after compilation but before tests.
-
-            This ensures that any parsing or type checking errors are from
-            javac, so they look as expected. Beyond that, we want to
-            fail as early as possible.
-          -->
-          <execution>
-            <phase>test-compile</phase>
-            <goals>
-              <goal>check</goal>
-            </goals>
-          </execution>
-        </executions>
       </plugin>
 
       <plugin>

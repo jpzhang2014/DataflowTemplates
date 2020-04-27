@@ -34,6 +34,8 @@ import com.google.gson.Gson;
 import com.google.gson.internal.LinkedHashTreeMap;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import org.apache.beam.runners.dataflow.options.DataflowPipelineOptions;
+import org.apache.beam.runners.dataflow.options.DataflowPipelineWorkerPoolOptions.AutoscalingAlgorithmType;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.coders.CoderRegistry;
@@ -169,7 +171,8 @@ public class PubSubToBigQuery {
    * The {@link Options} class provides the custom execution options passed by the executor at the
    * command-line.
    */
-  public interface Options extends PipelineOptions, JavascriptTextTransformerOptions {
+  public interface Options extends PipelineOptions, JavascriptTextTransformerOptions,
+      DataflowPipelineOptions {
     @Description("Table spec to write the output to")
     ValueProvider<String> getOutputTableSpec();
 
@@ -238,6 +241,9 @@ public class PubSubToBigQuery {
    */
   public static void main(String[] args) {
     Options options = PipelineOptionsFactory.fromArgs(args).withValidation().as(Options.class);
+
+    options.setEnableStreamingEngine(true);
+    options.setAutoscalingAlgorithm(AutoscalingAlgorithmType.THROUGHPUT_BASED);
 
     run(options);
   }
